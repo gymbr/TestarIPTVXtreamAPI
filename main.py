@@ -53,28 +53,21 @@ def normalize_text(text):
     return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8')
 
 def parse_urls(message):
-    # Regex ajustada para capturar corretamente username e password dentro de textos sujos
     m3u_pattern = r"(https?://[^\s\"']+(?:get\.php|player_api\.php)\?username=([a-zA-Z0-9]+)&password=([a-zA-Z0-9]+))"
-    
     found = re.findall(m3u_pattern, message)
     parsed_urls = []
     unique_ids = set()
 
     for item in found:
         full_url, user, pwd = item
-        # Extrai a base URL (protocolo + dominio + porta)
         base_match = re.search(r"(https?://[^/]+(?::\d+)?)", full_url)
-        
         if base_match:
             base = base_match.group(1)
-            # Normalização simples: garante que não tenha barra no final
             if base.endswith('/'): base = base[:-1]
-            
             identifier = (base, user, pwd)
             if identifier not in unique_ids:
                 unique_ids.add(identifier)
                 parsed_urls.append({"base": base, "username": user, "password": pwd})
-    
     return parsed_urls
 
 def get_series_details(base_url, username, password, series_id):
@@ -83,7 +76,6 @@ def get_series_details(base_url, username, password, series_id):
         resp = requests.get(url, headers=HEADERS, verify=False, timeout=10).json()
         episodes = resp.get("episodes", {})
         if not episodes: return None
-        
         last_season_num = max(int(k) for k in episodes.keys() if k.isdigit())
         last_episode = episodes[str(last_season_num)][-1]
         title = last_episode.get("title", "")
@@ -94,8 +86,6 @@ def get_series_details(base_url, username, password, series_id):
 def get_xtream_info(url_data, search_name=None):
     base, user, pwd = url_data["base"], url_data["username"], url_data["password"]
     u_enc, p_enc = quote(user), quote(pwd)
-    
-    # Monta a URL da API Xtream
     api_url = f"{base}/player_api.php?username={u_enc}&password={p_enc}"
     
     res = {
@@ -106,24 +96,19 @@ def get_xtream_info(url_data, search_name=None):
     }
 
     try:
-        # Request principal de login com HEADERS e sem verificação SSL
         main_resp = requests.get(api_url, headers=HEADERS, verify=False, timeout=15)
-        
         try:
             data_json = main_resp.json()
         except:
-            return url_data, res # Falha se não retornar JSON
+            return url_data, res
 
         if "user_info" not in data_json: 
             return url_data, res
         
         res["is_json"] = True
         user_info = data_json.get("user_info", {})
-        
-        # Data de Expiração
         exp = user_info.get("exp_date")
         if exp and str(exp).isdigit():
-            # Alguns servidores retornam timestamp nulo ou muito antigo
             if int(exp) == 0:
                 res["exp_date"] = "Ilimitado"
             else:
@@ -134,30 +119,22 @@ def get_xtream_info(url_data, search_name=None):
         res["active_cons"] = user_info.get("active_cons", "0")
         res["max_connections"] = user_info.get("max_connections", "0")
         
-        # Validar Domínio
         valid_tlds = ('.ca', '.io', '.cc', '.me', '.in', '.top', '.space')
         domain = urlparse(base).netloc.lower()
         res["is_accepted_domain"] = any(domain.endswith(tld) for tld in valid_tlds)
 
-        # Threading para buscar contagens reais e busca
         actions = {"live": "get_live_streams", "vod": "get_vod_streams", "series": "get_series"}
-        
         with ThreadPoolExecutor(max_workers=3) as executor:
             future_to_key = {
                 executor.submit(requests.get, f"{api_url}&action={act}", headers=HEADERS, verify=False, timeout=20): key 
                 for key, act in actions.items()
             }
-            
             for future in as_completed(future_to_key):
                 key = future_to_key[future]
                 try:
                     resp_content = future.result().json()
-                    
-                    # Verifica se é lista (padrão) ou dicionário (erro ou vazio)
                     if isinstance(resp_content, list):
                         res[f"{key}_count"] = len(resp_content)
-                        
-                        # Lógica de Busca
                         if search_name:
                             s_norm = normalize_text(search_name)
                             if key == "series":
@@ -170,21 +147,8 @@ def get_xtream_info(url_data, search_name=None):
                                 matches = [i.get("name") for i in resp_content if s_norm in normalize_text(i.get("name"))]
                                 cat_name = "Canais" if key == "live" else "Filmes"
                                 res["search_matches"][cat_name].extend(matches)
-                except: 
-                    continue
-
-        # Checar Conteúdo Adulto via Categorias
-        try:
-            cat_resp = requests.get(f"{api_url}&action=get_live_categories", headers=HEADERS, verify=False, timeout=10).json()
-            if isinstance(cat_resp, list):
-                if any(x in normalize_text(str(c)) for c in cat_resp for x in ["adulto", "xxx", "+18", "porn"]):
-                    res["has_adult_content"] = True
-        except: pass
-
-    except Exception as e:
-        # Em caso de erro grave de conexão
-        pass
-        
+                except: continue
+    except: pass
     return url_data, res
 
 # Interface
@@ -209,24 +173,25 @@ if submit and m3u_message:
                     
                     status_icon = "✅" if info["is_json"] else "❌"
                     
-                    st.markdown(f"### {status_icon} Servidor: `{orig['base']}`")
+                    # Layout modificado conforme solicitado
                     with st.container(border=True):
                         col_a, col_b = st.columns(2)
                         with col_a:
+                            # Servidor movido para dentro do container e acima do usuário
+                            st.write(f"{status_icon} **Servidor:** `{orig['base']}`")
                             st.write(f"👤 **Usuário:** `{orig['username']}`")
                             st.write(f"🔑 **Senha:** `{orig['password']}`")
                             
-                            # Cor para data de expiração
                             exp_date = info['exp_date']
                             color_date = "red" if "Falha" in exp_date else "green"
                             st.markdown(f"📅 **Expira:** <span style='color:{color_date}'>**{exp_date}**</span>", unsafe_allow_html=True)
                             
-                            st.write(f"🌐 **Domínio OK:** {'✅' if info['is_accepted_domain'] else '❌'}")
                         with col_b:
                             st.write(f"📺 **Canais:** `{info['live_count']}`")
                             st.write(f"🎬 **Filmes:** `{info['vod_count']}`")
                             st.write(f"🍿 **Séries:** `{info['series_count']}`")
                             st.write(f"👥 **Conexões:** `{info['active_cons']}/{info['max_connections']}`")
+                            st.write(f"🌐 **Domínio OK:** {'✅' if info['is_accepted_domain'] else '❌'}")
 
                         if search_query and any(info["search_matches"].values()):
                             st.info(f"🔎 Resultados para '{search_query}':")
