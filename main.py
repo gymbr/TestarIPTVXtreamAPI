@@ -60,14 +60,26 @@ def parse_urls(message):
 
     for item in found:
         full_url, user, pwd = item
+        # Extrai a base URL incluindo a porta para a conexão técnica
         base_match = re.search(r"(https?://[^/]+(?::\d+)?)", full_url)
         if base_match:
-            base = base_match.group(1)
-            if base.endswith('/'): base = base[:-1]
-            identifier = (base, user, pwd)
+            base_full = base_match.group(1)
+            if base_full.endswith('/'): base_full = base_full[:-1]
+            
+            # Criar a versão sem porta para exibição no layout
+            parsed_url = urlparse(base_full)
+            # Remove a porta do netloc (ex: pro123.ddns.me:80 -> pro123.ddns.me)
+            base_display = f"{parsed_url.scheme}://{parsed_url.hostname}"
+            
+            identifier = (base_full, user, pwd)
             if identifier not in unique_ids:
                 unique_ids.add(identifier)
-                parsed_urls.append({"base": base, "username": user, "password": pwd})
+                parsed_urls.append({
+                    "base": base_full, 
+                    "display_base": base_display, 
+                    "username": user, 
+                    "password": pwd
+                })
     return parsed_urls
 
 def get_series_details(base_url, username, password, series_id):
@@ -125,7 +137,6 @@ def get_xtream_info(url_data, search_name=None):
         domain = urlparse(base).netloc.lower()
         res["is_accepted_domain"] = any(domain.endswith(tld) for tld in valid_tlds)
 
-        # Buscar Categorias para checar Adulto
         try:
             cat_resp = requests.get(f"{api_url}&action=get_live_categories", headers=HEADERS, verify=False, timeout=10).json()
             if isinstance(cat_resp, list):
@@ -149,9 +160,8 @@ def get_xtream_info(url_data, search_name=None):
                     if isinstance(resp_content, list):
                         res[f"{key}_count"] = len(resp_content)
                         
-                        # Check adicional de conteúdo adulto nos nomes dos canais se ainda não achou nas categorias
                         if not res["has_adult_content"] and key == "live":
-                            for item in resp_content[:100]: # Checa apenas os primeiros 100 para performance
+                            for item in resp_content[:100]:
                                 if any(key in normalize_text(item.get("name", "")) for key in adult_keys):
                                     res["has_adult_content"] = True
                                     break
@@ -197,7 +207,8 @@ if submit and m3u_message:
                     with st.container(border=True):
                         col_a, col_b = st.columns(2)
                         with col_a:
-                            st.write(f"{status_icon} **Servidor:** `{orig['base']}`")
+                            # Usa 'display_base' para mostrar o servidor SEM a porta
+                            st.write(f"{status_icon} **Servidor:** `{orig['display_base']}`")
                             st.write(f"👤 **Usuário:** `{orig['username']}`")
                             st.write(f"🔑 **Senha:** `{orig['password']}`")
                             
@@ -205,7 +216,6 @@ if submit and m3u_message:
                             color_date = "red" if "Falha" in exp_date else "green"
                             st.markdown(f"📅 **Expira:** <span style='color:{color_date}'>**{exp_date}**</span>", unsafe_allow_html=True)
                             
-                            # Nova linha de Conteúdo Adulto
                             adult_status = "🔞 Sim" if info["has_adult_content"] else "🛡️ Não"
                             st.write(f"🔞 **Adulto:** `{adult_status}`")
                             
