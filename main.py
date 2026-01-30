@@ -60,15 +60,13 @@ def parse_urls(message):
 
     for item in found:
         full_url, user, pwd = item
-        # Extrai a base URL incluindo a porta para a conexão técnica
         base_match = re.search(r"(https?://[^/]+(?::\d+)?)", full_url)
         if base_match:
             base_full = base_match.group(1)
             if base_full.endswith('/'): base_full = base_full[:-1]
             
-            # Criar a versão sem porta para exibição no layout
+            # Extrai apenas o hostname (ex: pro123.ddns.me)
             parsed_url = urlparse(base_full)
-            # Remove a porta do netloc (ex: pro123.ddns.me:80 -> pro123.ddns.me)
             base_display = f"{parsed_url.scheme}://{parsed_url.hostname}"
             
             identifier = (base_full, user, pwd)
@@ -97,6 +95,7 @@ def get_series_details(base_url, username, password, series_id):
 
 def get_xtream_info(url_data, search_name=None):
     base, user, pwd = url_data["base"], url_data["username"], url_data["password"]
+    display_base = url_data["display_base"]
     u_enc, p_enc = quote(user), quote(pwd)
     api_url = f"{base}/player_api.php?username={u_enc}&password={p_enc}"
     
@@ -133,9 +132,10 @@ def get_xtream_info(url_data, search_name=None):
         res["active_cons"] = user_info.get("active_cons", "0")
         res["max_connections"] = user_info.get("max_connections", "0")
         
+        # Lógica de validação do domínio baseada no display_base (sem porta)
         valid_tlds = ('.ca', '.io', '.cc', '.me', '.in', '.top', '.space')
-        domain = urlparse(base).netloc.lower()
-        res["is_accepted_domain"] = any(domain.endswith(tld) for tld in valid_tlds)
+        clean_domain = display_base.lower()
+        res["is_accepted_domain"] = any(clean_domain.endswith(tld) for tld in valid_tlds)
 
         try:
             cat_resp = requests.get(f"{api_url}&action=get_live_categories", headers=HEADERS, verify=False, timeout=10).json()
@@ -159,13 +159,11 @@ def get_xtream_info(url_data, search_name=None):
                     resp_content = future.result().json()
                     if isinstance(resp_content, list):
                         res[f"{key}_count"] = len(resp_content)
-                        
                         if not res["has_adult_content"] and key == "live":
                             for item in resp_content[:100]:
                                 if any(key in normalize_text(item.get("name", "")) for key in adult_keys):
                                     res["has_adult_content"] = True
                                     break
-
                         if search_name:
                             s_norm = normalize_text(search_name)
                             if key == "series":
@@ -207,7 +205,6 @@ if submit and m3u_message:
                     with st.container(border=True):
                         col_a, col_b = st.columns(2)
                         with col_a:
-                            # Usa 'display_base' para mostrar o servidor SEM a porta
                             st.write(f"{status_icon} **Servidor:** `{orig['display_base']}`")
                             st.write(f"👤 **Usuário:** `{orig['username']}`")
                             st.write(f"🔑 **Senha:** `{orig['password']}`")
@@ -224,7 +221,10 @@ if submit and m3u_message:
                             st.write(f"🎬 **Filmes:** `{info['vod_count']}`")
                             st.write(f"🍿 **Séries:** `{info['series_count']}`")
                             st.write(f"👥 **Conexões:** `{info['active_cons']}/{info['max_connections']}`")
-                            st.write(f"🌐 **Domínio OK:** {'✅' if info['is_accepted_domain'] else '❌'}")
+                            
+                            # Ajustado para Domínio TV e checando a URL limpa
+                            domain_status = "✅" if info['is_accepted_domain'] else "❌"
+                            st.write(f"📺 **Domínio TV:** {domain_status}")
 
                         if search_query and any(info["search_matches"].values()):
                             st.info(f"🔎 Resultados para '{search_query}':")
