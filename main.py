@@ -95,6 +95,8 @@ def get_xtream_info(url_data, search_name=None):
         "search_matches": {"Canais": [], "Filmes": [], "Séries": {}}
     }
 
+    adult_keys = ["adult", "xxx", "+18", "sex", "porn", "adulto"]
+
     try:
         main_resp = requests.get(api_url, headers=HEADERS, verify=False, timeout=15)
         try:
@@ -123,6 +125,17 @@ def get_xtream_info(url_data, search_name=None):
         domain = urlparse(base).netloc.lower()
         res["is_accepted_domain"] = any(domain.endswith(tld) for tld in valid_tlds)
 
+        # Buscar Categorias para checar Adulto
+        try:
+            cat_resp = requests.get(f"{api_url}&action=get_live_categories", headers=HEADERS, verify=False, timeout=10).json()
+            if isinstance(cat_resp, list):
+                for cat in cat_resp:
+                    cat_name = normalize_text(cat.get("category_name", ""))
+                    if any(key in cat_name for key in adult_keys):
+                        res["has_adult_content"] = True
+                        break
+        except: pass
+
         actions = {"live": "get_live_streams", "vod": "get_vod_streams", "series": "get_series"}
         with ThreadPoolExecutor(max_workers=3) as executor:
             future_to_key = {
@@ -135,6 +148,14 @@ def get_xtream_info(url_data, search_name=None):
                     resp_content = future.result().json()
                     if isinstance(resp_content, list):
                         res[f"{key}_count"] = len(resp_content)
+                        
+                        # Check adicional de conteúdo adulto nos nomes dos canais se ainda não achou nas categorias
+                        if not res["has_adult_content"] and key == "live":
+                            for item in resp_content[:100]: # Checa apenas os primeiros 100 para performance
+                                if any(key in normalize_text(item.get("name", "")) for key in adult_keys):
+                                    res["has_adult_content"] = True
+                                    break
+
                         if search_name:
                             s_norm = normalize_text(search_name)
                             if key == "series":
@@ -173,11 +194,9 @@ if submit and m3u_message:
                     
                     status_icon = "✅" if info["is_json"] else "❌"
                     
-                    # Layout modificado conforme solicitado
                     with st.container(border=True):
                         col_a, col_b = st.columns(2)
                         with col_a:
-                            # Servidor movido para dentro do container e acima do usuário
                             st.write(f"{status_icon} **Servidor:** `{orig['base']}`")
                             st.write(f"👤 **Usuário:** `{orig['username']}`")
                             st.write(f"🔑 **Senha:** `{orig['password']}`")
@@ -185,6 +204,10 @@ if submit and m3u_message:
                             exp_date = info['exp_date']
                             color_date = "red" if "Falha" in exp_date else "green"
                             st.markdown(f"📅 **Expira:** <span style='color:{color_date}'>**{exp_date}**</span>", unsafe_allow_html=True)
+                            
+                            # Nova linha de Conteúdo Adulto
+                            adult_status = "🔞 Sim" if info["has_adult_content"] else "🛡️ Não"
+                            st.write(f"🔞 **Adulto:** `{adult_status}`")
                             
                         with col_b:
                             st.write(f"📺 **Canais:** `{info['live_count']}`")
