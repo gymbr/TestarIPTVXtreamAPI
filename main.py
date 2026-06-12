@@ -224,7 +224,6 @@ if submit and m3u_message:
                             st.write(f"📺 **Domínio TV:** {domain_status}")
                         
                         # Exibição dos links formatados como hiperlinks clicáveis em Markdown
-                        st.markdown("🔗 **Links Gerados (clicáveis):**")
                         m3u_generated = f"{orig['base']}/get.php?username={orig['username']}&password={orig['password']}&type=m3u_plus"
                         json_generated = f"{orig['base']}/player_api.php?username={orig['username']}&password={orig['password']}"
                         
@@ -242,5 +241,3 @@ if submit and m3u_message:
                                         for m in matches[:10]: st.write(f"- {m}")
                                         if len(matches) > 10: st.write(f"... e mais {len(matches)-10}")
                     st.divider()
-
-st.info("Nota: Este script usa Headers de navegador e ignora erros SSL para garantir conexão com servidores antigos ou mal configurados.")
