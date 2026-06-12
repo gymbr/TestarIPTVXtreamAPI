@@ -21,7 +21,7 @@ HEADERS = {
     "Connection": "keep-alive"
 }
 
-# Estilos CSS
+# Estilos CSS (Inclui quebra de linha automática para links longos)
 st.markdown("""
     <style>
         .block-container { padding-top: 2.5rem; }
@@ -53,7 +53,7 @@ def normalize_text(text):
     return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8')
 
 def parse_urls(message):
-    m3u_pattern = r"(https?://[^\s\"']+(?:get\.php|player_api\.php)\?username=([a-zA-Z0-9]+)&password=([a-zA-Z0-9]+))"
+    m3u_pattern = r"(https?://[^\s\"']+(?:get\.php|player_api\.php)\?username=([^\s&\"']+)&password=([^\s&\"']+))"
     found = re.findall(m3u_pattern, message)
     parsed_urls = []
     unique_ids = set()
@@ -65,7 +65,6 @@ def parse_urls(message):
             base_full = base_match.group(1)
             if base_full.endswith('/'): base_full = base_full[:-1]
             
-            # Extrai apenas o hostname (ex: pro123.ddns.me)
             parsed_url = urlparse(base_full)
             base_display = f"{parsed_url.scheme}://{parsed_url.hostname}"
             
@@ -127,12 +126,11 @@ def get_xtream_info(url_data, search_name=None):
             else:
                 res["exp_date"] = "Nunca expira" if int(exp) > time.time() * 200 else datetime.fromtimestamp(int(exp)).strftime('%d/%m/%Y')
         else:
-             res["exp_date"] = "Indefinido"
+            res["exp_date"] = "Indefinido"
         
         res["active_cons"] = user_info.get("active_cons", "0")
         res["max_connections"] = user_info.get("max_connections", "0")
         
-        # Lógica de validação do domínio baseada no display_base (sem porta)
         valid_tlds = ('.ca', '.io', '.cc', '.me', '.in', '.top', '.space')
         clean_domain = display_base.lower()
         res["is_accepted_domain"] = any(clean_domain.endswith(tld) for tld in valid_tlds)
@@ -222,9 +220,16 @@ if submit and m3u_message:
                             st.write(f"🍿 **Séries:** `{info['series_count']}`")
                             st.write(f"👥 **Conexões:** `{info['active_cons']}/{info['max_connections']}`")
                             
-                            # Ajustado para Domínio TV e checando a URL limpa
                             domain_status = "✅" if info['is_accepted_domain'] else "❌"
                             st.write(f"📺 **Domínio TV:** {domain_status}")
+                        
+                        # Exibição dos links formatados como hiperlinks clicáveis em Markdown
+                        st.markdown("🔗 **Links Gerados (clicáveis):**")
+                        m3u_generated = f"{orig['base']}/get.php?username={orig['username']}&password={orig['password']}&type=m3u_plus"
+                        json_generated = f"{orig['base']}/player_api.php?username={orig['username']}&password={orig['password']}"
+                        
+                        st.markdown(f"📥 **M3U:** [{m3u_generated}]({m3u_generated})")
+                        st.markdown(f"🌐 **JSON:** [{json_generated}]({json_generated})")
 
                         if search_query and any(info["search_matches"].values()):
                             st.info(f"🔎 Resultados para '{search_query}':")
