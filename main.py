@@ -192,52 +192,63 @@ if submit and m3u_message:
     if not parsed:
         st.error("Nenhuma URL ou credencial válida encontrada no texto.")
     else:
+        all_results = []
         with st.spinner(f"Analisando {len(parsed)} servidor(es)..."):
             with ThreadPoolExecutor(max_workers=5) as executor:
                 futures = [executor.submit(get_xtream_info, url, search_query) for url in parsed]
                 for future in as_completed(futures):
-                    orig, info = future.result()
+                    all_results.append(future.result())
+        
+        # Ordena os resultados: is_json=True (OK) primeiro, depois is_json=False (Erro)
+        all_results.sort(key=lambda x: x[1]["is_json"], reverse=True)
+        
+        st.write("### 📋 Resultados dos Usuários")
+        
+        # Renderização em formato de linhas expansíveis
+        for orig, info in all_results:
+            status_icon = "✅" if info["is_json"] else "❌"
+            exp_date = info['exp_date']
+            
+            # Título do expander simulando a linha da tabela
+            row_title = f"{status_icon} Servidor: {orig['display_base']} | Usuário: {orig['username']}"
+            
+            with st.expander(row_title):
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.write(f"🌐 **Servidor Real:** `{orig['base']}`")
+                    st.write(f"👤 **Usuário:** `{orig['username']}`")
+                    st.write(f"🔑 **Senha:** `{orig['password']}`")
                     
-                    status_icon = "✅" if info["is_json"] else "❌"
+                    color_date = "red" if "Falha" in exp_date else "green"
+                    st.markdown(f"📅 **Expira:** <span style='color:{color_date}'>**{exp_date}**</span>", unsafe_allow_html=True)
                     
-                    with st.container(border=True):
-                        col_a, col_b = st.columns(2)
-                        with col_a:
-                            st.write(f"{status_icon} **Servidor:** `{orig['display_base']}`")
-                            st.write(f"👤 **Usuário:** `{orig['username']}`")
-                            st.write(f"🔑 **Senha:** `{orig['password']}`")
-                            
-                            exp_date = info['exp_date']
-                            color_date = "red" if "Falha" in exp_date else "green"
-                            st.markdown(f"📅 **Expira:** <span style='color:{color_date}'>**{exp_date}**</span>", unsafe_allow_html=True)
-                            
-                            adult_status = "🔞 Sim" if info["has_adult_content"] else "🛡️ Não"
-                            st.write(f"🔞 **Adulto:** `{adult_status}`")
-                            
-                        with col_b:
-                            st.write(f"📺 **Canais:** `{info['live_count']}`")
-                            st.write(f"🎬 **Filmes:** `{info['vod_count']}`")
-                            st.write(f"🍿 **Séries:** `{info['series_count']}`")
-                            st.write(f"👥 **Conexões:** `{info['active_cons']}/{info['max_connections']}`")
-                            
-                            domain_status = "✅" if info['is_accepted_domain'] else "❌"
-                            st.write(f"📺 **Domínio TV:** {domain_status}")
-                        
-                        # Exibição dos links formatados como hiperlinks clicáveis em Markdown
-                        m3u_generated = f"{orig['base']}/get.php?username={orig['username']}&password={orig['password']}&type=m3u_plus"
-                        json_generated = f"{orig['base']}/player_api.php?username={orig['username']}&password={orig['password']}"
-                        
-                        st.markdown(f"📥 **M3U:** [{m3u_generated}]({m3u_generated})")
-                        st.markdown(f"🌐 **JSON:** [{json_generated}]({json_generated})")
+                    adult_status = "🔞 Sim" if info["has_adult_content"] else "🛡️ Não"
+                    st.write(f"🔞 **Adulto:** `{adult_status}`")
+                    
+                with col_b:
+                    st.write(f"📺 **Canais:** `{info['live_count']}`")
+                    st.write(f"🎬 **Filmes:** `{info['vod_count']}`")
+                    st.write(f"🍿 **Séries:** `{info['series_count']}`")
+                    st.write(f"👥 **Conexões:** `{info['active_cons']}/{info['max_connections']}`")
+                    
+                    domain_status = "✅" if info['is_accepted_domain'] else "❌"
+                    st.write(f"📺 **Domínio TV:** {domain_status}")
+                
+                # Links gerados
+                m3u_generated = f"{orig['base']}/get.php?username={orig['username']}&password={orig['password']}&type=m3u_plus"
+                json_generated = f"{orig['base']}/player_api.php?username={orig['username']}&password={orig['password']}"
+                
+                st.markdown(f"📥 **M3U:** [{m3u_generated}]({m3u_generated})")
+                st.markdown(f"🌐 **JSON:** [{json_generated}]({json_generated})")
 
-                        if search_query and any(info["search_matches"].values()):
-                            st.info(f"🔎 Resultados para '{search_query}':")
-                            for cat, matches in info["search_matches"].items():
-                                if matches:
-                                    st.write(f"**{cat}:**")
-                                    if isinstance(matches, dict):
-                                        for n, v in matches.items(): st.write(f"- {n} ({v})")
-                                    else:
-                                        for m in matches[:10]: st.write(f"- {m}")
-                                        if len(matches) > 10: st.write(f"... e mais {len(matches)-10}")
-                    st.divider()
+                # Resultados da busca dentro do expander correspondente
+                if search_query and any(info["search_matches"].values()):
+                    st.info(f"🔎 Resultados para '{search_query}':")
+                    for cat, matches in info["search_matches"].items():
+                        if matches:
+                            st.write(f"**{cat}:**")
+                            if isinstance(matches, dict):
+                                for n, v in matches.items(): st.write(f"- {n} ({v})")
+                            else:
+                                for m in matches[:10]: st.write(f"- {m}")
+                                if len(matches) > 10: st.write(f"... e mais {len(matches)-10}")
