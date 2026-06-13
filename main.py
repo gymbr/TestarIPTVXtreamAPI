@@ -1,7 +1,7 @@
 import streamlit as st
 import re
 import requests
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlparse, unquote
 from datetime import datetime
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -60,6 +60,10 @@ def parse_urls(message):
 
     for item in found:
         full_url, user, pwd = item
+        # Decodifica para evitar dupla codificação posterior (ex: %40 virando %2540)
+        user = unquote(user)
+        pwd = unquote(pwd)
+        
         base_match = re.search(r"(https?://[^/]+(?::\d+)?)", full_url)
         if base_match:
             base_full = base_match.group(1)
@@ -235,8 +239,8 @@ if submit and m3u_message:
                     st.write(f"📺 **Domínio TV:** {domain_status}")
                 
                 # Links gerados
-                m3u_generated = f"{orig['base']}/get.php?username={orig['username']}&password={orig['password']}&type=m3u_plus"
-                json_generated = f"{orig['base']}/player_api.php?username={orig['username']}&password={orig['password']}"
+                m3u_generated = f"{orig['base']}/get.php?username={quote(orig['username'])}&password={quote(orig['password'])}&type=m3u_plus"
+                json_generated = f"{orig['base']}/player_api.php?username={quote(orig['username'])}&password={quote(orig['password'])}"
                 
                 st.markdown(f"📥 **M3U:** [{m3u_generated}]({m3u_generated})")
                 st.markdown(f"🌐 **JSON:** [{json_generated}]({json_generated})")
